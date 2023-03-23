@@ -7,6 +7,7 @@
 #include <IRac.h>
 #include <IRutils.h>
 #include <IRrecv.h>
+#include <math.h>       //library used for the floor function
 
 #define DEBUG true
 
@@ -238,6 +239,70 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length)
     }
     else if (requestJson["op"] == "update-weather")
     {
+    
+      //beware that i do not print anything, also i do not know if this works as i can't test this myself
+
+      //default values for testing, need to be set by user
+      int solar_panel_surface_area = 15;
+      int ac_power_requirement = 3500; //a value I grabbed of the internet
+      int operating_hours[2] = {7, 20};
+      int temperature_threshold = 10;
+      //Is there a meaninful difference between temperature outside and inside?
+      if(abs(requestJson['hours'][0]['temp'] - state.celsius) < 3)
+      {
+        //turn off the ac if it is on
+        if(state.power == true)
+        {
+          setAcNextState(&"power", false); //i do not know what the exact method of this is
+        }
+      }
+      //compare solar radiation
+      else if(requestJson['hours'][0]['solarRadiation']*solar_panel_surface_area> ac_power_requirement)
+      {
+        //turn on the ac if it is off
+        if(state.power == false)
+        {
+          setAcNextState(&"power", true); //i do not know what the exact method of this is
+        }
+      }
+      //are we in the operating times?
+      else 
+      {
+        //convert these in this hideous way for now
+        //this is UTC
+        uint32_t days = (uint32_t)floor(requestJson['hours'][0]['time'] / 86400);
+        uint32_t hours = (uint32_t)floor(((requestJson['hours'][0]['time'] - days * 86400) / 3600) % 24);
+        
+        //if we are inside operating times
+        if(operating_hours[0] <= hours || hours < operating_hours[1])
+        {
+          //is the temperature difference now or in an hour larger than the threshold value?
+          if(abs(requestJson['hours'][0]['temp'] - state.celsius) > temperature_threshold || abs(requestJson['hours'][1]['temp'] - state.celsius) > temperature_threshold)
+          {
+            //turn on the ac if it is off
+            if(state.power == false)
+            {
+              setAcNextState(&"power", true); //i do not know what the exact method of this is
+            }
+          }
+          else
+          {
+            //turn off the ac if it is on
+            if(state.power == true)
+            {
+              setAcNextState(&"power", false); //i do not know what the exact method of this is
+            }
+          }
+        }
+        else
+        {
+          //turn off the ac if it is on
+          if(state.power == true)
+          {
+            setAcNextState(&"power", false); //i do not know what the exact method of this is
+          }
+        }
+      }
     }
 
     PRINTS("[WSc] Successfully handled websocket request\n");
